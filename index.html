@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bit Weave · 比特织机</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2329; --sub:#6b7280;
+    --line:#e6e8eb; --accent:#2f6df6; --accent-ink:#ffffff;
+    --good:#1a9e57; --end:#d94b4b; --warn:#c47f00;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.2px}
+  header p{margin:4px 0 0;color:var(--sub);font-size:12.5px}
+  .wrap{display:flex;gap:16px;padding:16px 22px;align-items:flex-start;flex-wrap:wrap}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .controls{width:320px;flex:0 0 auto}
+  .stage{flex:1 1 480px;min-width:340px;display:flex;flex-direction:column;gap:16px}
+  .row{margin:10px 0}
+  label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+  textarea,select,input[type=number]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:13px}
+  textarea{font-family:var(--mono);min-height:120px;resize:vertical}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  button{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 12px;border-radius:8px;font-size:13px;transition:.12s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  button.primary:hover{filter:brightness(1.05);color:#fff}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat{background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .stat .k{font-size:11px;color:var(--sub)}
+  .stat .v{font-size:15px;font-family:var(--mono);margin-top:2px}
+  .stat .v.good{color:var(--good)}
+  .note{color:var(--sub);font-size:12px;margin-top:10px}
+  .err{color:var(--end);font-size:12px;margin-top:8px;min-height:14px}
+  .ok{color:var(--good);font-size:12px;margin-top:8px;min-height:14px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:8px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  code{font-family:var(--mono);background:#f0f2f5;padding:1px 5px;border-radius:5px;font-size:12px}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  th,td{border:1px solid var(--line);padding:4px 7px;text-align:left}
+  th{background:#fafbfc;color:var(--sub);font-weight:600}
+  td.code{font-family:var(--mono)}
+  .freq-wrap{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .bitbox{font-family:var(--mono);font-size:12px;background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:9px;word-break:break-all;max-height:140px;overflow:auto;color:#374151}
+  .tree-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;padding:6px}
+  canvas{display:block}
+  .seg{font-size:11px;color:var(--sub);margin:2px 0 6px}
+  @media (max-width:760px){.controls{width:100%}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bit Weave <span style="font-size:11px;color:var(--accent);border:1px solid var(--line);border-radius:20px;padding:1px 9px;margin-left:6px">比特织机</span></h1>
+  <p>Huffman 无损压缩工坊 — 频率统计、最优前缀码、二叉树可视化、编码/解码无损往返 — 单文件 · 离线 · 种子无关（输入即结果）</p>
+</header>
+
+<div class="wrap">
+  <div class="panel controls">
+    <div class="row">
+      <label>待压缩文本</label>
+      <textarea id="src" placeholder="输入任意文本…">the quick brown fox jumps over the lazy dog</textarea>
+    </div>
+    <div class="row">
+      <label>示例文本</label>
+      <select id="sample">
+        <option value="">— 选择示例 —</option>
+        <option value="the quick brown fox jumps over the lazy dog">英文全字母句</option>
+        <option value="床前明月光疑是地上霜举头望明月低头思故乡">中文五言诗</option>
+        <option value="AAAAAAAAAAABBBBBBCCCDDEEFFFFGG">高度偏斜（压缩收益大）</option>
+        <option value="function fib(n){return n<2?n:fib(n-1)+fib(n-2);}">代码片段</option>
+        <option value="ab">仅两个符号 a b</option>
+        <option value="aaaaaaaaaa">单一符号重复</option>
+        <option value="https://github.com/CJX0712">URL</option>
+      </select>
+    </div>
+    <div class="btns">
+      <button class="primary" id="gen">生成压缩</button>
+      <button id="verify">验证无损往返</button>
+      <button id="rand">随机示例</button>
+      <button id="dl">下载树 PNG</button>
+    </div>
+    <div class="ok" id="ok"></div>
+    <div class="err" id="err"></div>
+    <div class="note">原理：按字节频率建二叉最优前缀码树（高频短码），编码后比特数通常远小于原始 8×字节数。解码用同一棵树逐位还原，保证字节级无损。</div>
+  </div>
+
+  <div class="stage">
+    <div class="panel">
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="panel">
+      <div class="seg">频率表与码字（叶子显示字符，内部节点显示合并频率）</div>
+      <div class="freq-wrap"><table id="freq"><thead><tr><th>字节</th><th>字符</th><th>频次</th><th>码字</th><th>码长</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <div class="seg">编码比特流（仅展示前 240 位，末尾显示总位数）</div>
+      <div class="bitbox" id="bits"></div>
+    </div>
+
+    <div class="panel">
+      <div class="seg">Huffman 树（左支标 0，右支标 1；节点圆内为频率/字符）</div>
+      <div class="tree-wrap"><canvas id="tree"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script id="engine">
+(function(){
+  "use strict";
+  var HUFF = {};
+
+  HUFF.textToBytes = function(str){ return new TextEncoder().encode(str); };
+  HUFF.bytesToText = function(u8){ return new TextDecoder().decode(u8); };
+
+  // frequency per byte value 0..255
+  HUFF.freqs = function(u8){
+    var f = new Array(256).fill(0);
+    for (var i=0;i<u8.length;i++) f[u8[i]]++;
+    var map = {};
+    for (var v=0; v<256; v++) if (f[v] > 0) map[v] = f[v];
+    return map;
+  };
+
+  // build Huffman tree; deterministic via stable id tie-break
+  HUFF.buildTree = function(freqMap){
+    var syms = Object.keys(freqMap).map(Number).sort(function(a,b){ return a-b; });
+    if (syms.length === 0) return null;
+    var idc = 0;
+    var pool = syms.map(function(v){
+      return { freq: freqMap[v], sym: v, left: null, right: null, id: idc++ };
+    });
+    if (pool.length === 1){
+      return { freq: pool[0].freq, sym: pool[0].sym, left: null, right: null, id: idc++, single: true };
+    }
+    while (pool.length > 1){
+      pool.sort(function(a,b){ return (a.freq - b.freq) || (a.id - b.id); });
+      var a = pool.shift();
+      var b = pool.shift();
+      pool.push({ freq: a.freq + b.freq, sym: null, left: a, right: b, id: idc++ });
+    }
+    return pool[0];
+  };
+
+  HUFF.assignCodes = function(root){
+    var codes = {};
+    if (!root) return codes;
+    if (root.single || (root.left === null && root.right === null)){
+      codes[root.sym] = "0";
+      return codes;
+    }
+    (function dfs(node, prefix){
+      if (node.left === null && node.right === null){ codes[node.sym] = prefix; return; }
+      if (node.left) dfs(node.left, prefix + "0");
+      if (node.right) dfs(node.right, prefix + "1");
+    })(root, "");
+    return codes;
+  };
+
+  // bits -> packed bytes (MSB first)
+  HUFF.encode = function(u8, codes){
+    var bits = "";
+    for (var i=0;i<u8.length;i++) bits += codes[u8[i]];
+    var bitCount = bits.length;
+    var outLen = Math.ceil(bitCount / 8);
+    var out = new Uint8Array(outLen);
+    for (var j=0;j<bitCount;j++){
+      if (bits[j] === "1") out[j >> 3] |= (1 << (7 - (j & 7)));
+    }
+    return { bits: bits, bitCount: bitCount, bytes: out };
+  };
+
+  HUFF.decode = function(out, root, bitCount){
+    var res = [];
+    if (!root) return new Uint8Array(0);
+    if (root.single || (root.left === null && root.right === null)){
+      for (var k=0;k<bitCount;k++) res.push(root.sym);
+      return new Uint8Array(res);
+    }
+    var node = root;
+    for (var i=0;i<bitCount;i++){
+      var byte = out[i >> 3];
+      var bit = (byte >> (7 - (i & 7))) & 1;
+      node = (bit === 0) ? node.left : node.right;
+      if (node.left === null && node.right === null){ res.push(node.sym); node = root; }
+    }
+    return new Uint8Array(res);
+  };
+
+  HUFF.isPrefixFree = function(codes){
+    var arr = Object.keys(codes).map(function(k){ return codes[k]; });
+    for (var i=0;i<arr.length;i++){
+      for (var j=0;j<arr.length;j++){
+        if (i===j) continue;
+        if (arr[j].indexOf(arr[i]) === 0 && arr[j].length > arr[i].length) return false;
+      }
+    }
+    return true;
+  };
+
+  HUFF.compress = function(str){
+    var u8 = HUFF.textToBytes(str);
+    var fmap = HUFF.freqs(u8);
+    var root = HUFF.buildTree(fmap);
+    var codes = HUFF.assignCodes(root);
+    var enc = HUFF.encode(u8, codes);
+    return { u8:u8, fmap:fmap, root:root, codes:codes, bitCount:enc.bitCount, bits:enc.bits, bytes:enc.bytes, originalBits: u8.length * 8 };
+  };
+  HUFF.decompress = function(comp){
+    var dec = HUFF.decode(comp.bytes, comp.root, comp.bitCount);
+    return HUFF.bytesToText(dec);
+  };
+
+  if (typeof globalThis !== "undefined") globalThis.HUFF = HUFF;
+})();
+</script>
+
+<script id="ui">
+if (typeof document === "undefined") return;
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var srcEl = $("src"), sampleEl = $("sample"), statsEl = $("stats"), freqEl = $("freq"),
+      bitsEl = $("bits"), treeEl = $("tree"), okEl = $("ok"), errEl = $("err");
+  var lastComp = null;
+
+  function esc(s){ return s.replace(/[&<>]/g, function(c){ return c==="&" ? "&amp;" : c==="<" ? "&lt;" : "&gt;"; }); }
+
+  function charLabel(v){
+    if (v >= 32 && v < 127 && v !== 60 && v !== 62 && v !== 38) return String.fromCharCode(v);
+    return "\\x" + v.toString(16).padStart(2, "0");
+  }
+
+  function render(){
+    errEl.textContent = ""; okEl.textContent = "";
+    var text = srcEl.value;
+    var comp;
+    try { comp = HUFF.compress(text); }
+    catch(e){ errEl.textContent = "压缩失败：" + e.message; return; }
+    lastComp = comp;
+
+    var symCount = Object.keys(comp.fmap).length;
+    var avgBits = comp.u8.length ? (comp.bitCount / comp.u8.length) : 0;
+    var ratio = comp.originalBits ? (comp.originalBits / Math.max(1, comp.bitCount)) : 0;
+    var saved = comp.originalBits ? (100 * (1 - comp.bitCount / comp.originalBits)) : 0;
+
+    statsEl.innerHTML =
+      stat("字节数", comp.u8.length) +
+      stat("符号数", symCount) +
+      stat("原始比特", comp.originalBits) +
+      stat("压缩比特", comp.bitCount) +
+      stat("平均码长", avgBits.toFixed(2) + " b") +
+      stat("压缩比", ratio.toFixed(2) + "×") +
+      stat("节省", saved.toFixed(1) + " %", saved > 0) +
+      stat("前缀码", HUFF.isPrefixFree(comp.codes) ? "是 ✓" : "否 ✗", HUFF.isPrefixFree(comp.codes));
+
+    // freq table
+    var rows = "";
+    var syms = Object.keys(comp.fmap).map(Number).sort(function(a,b){ return comp.fmap[b]-comp.fmap[a] || a-b; });
+    for (var i=0;i<syms.length;i++){
+      var v = syms[i];
+      var code = comp.codes[v];
+      rows += "<tr><td class='code'>" + v + "</td><td>" + esc(charLabel(v)) + "</td><td>" + comp.fmap[v] +
+              "</td><td class='code'>" + code + "</td><td>" + code.length + "</td></tr>";
+    }
+    freqEl.getElementsByTagName("tbody")[0].innerHTML = rows;
+
+    // bitstream (first 240)
+    var shown = comp.bits.slice(0, 240);
+    bitsEl.textContent = (comp.bitCount === 0 ? "（空输入，无比特）" : shown + (comp.bitCount > 240 ? " …（共 " + comp.bitCount + " 位）" : ""));
+
+    drawTree(comp.root);
+
+    function stat(k, v, good){
+      return "<div class='stat'><div class='k'>" + k + "</div><div class='v" + (good ? " good" : "") + "'>" + v + "</div></div>";
+    }
+  }
+
+  function drawTree(root){
+    var cv = treeEl;
+    var ctx = cv.getContext("2d");
+    if (!root){ cv.width = 320; cv.height = 80; ctx.clearRect(0,0,320,80); ctx.fillStyle = "#6b7280"; ctx.font = "13px sans-serif"; ctx.fillText("（空输入）", 12, 44); return; }
+    // layout: in-order x slot, depth y
+    var slot = 0; var depthMap = {}; var maxDepth = 0;
+    (function layout(node, d){
+      if (!node) return;
+      depthMap[node.id] = d; if (d > maxDepth) maxDepth = d;
+      layout(node.left, d+1);
+      node._x = slot++;
+      layout(node.right, d+1);
+    })(root, 0);
+    var total = slot;
+    var dx = Math.max(26, Math.min(64, Math.floor(900 / Math.max(1, total))));
+    var dy = 56;
+    var W = Math.max(360, total * dx + 40);
+    var H = (maxDepth + 1) * dy + 30;
+    cv.width = W; cv.height = H;
+    ctx.clearRect(0,0,W,H);
+    var px = function(node){ return 20 + node._x * dx; };
+    var py = function(node){ return 20 + depthMap[node.id] * dy; };
+
+    function drawNode(node){
+      if (!node) return;
+      if (node.left){ drawEdge(node, node.left, "0"); drawNode(node.left); }
+      if (node.right){ drawEdge(node, node.right, "1"); drawNode(node.right); }
+      var x = px(node), y = py(node);
+      ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI*2);
+      ctx.fillStyle = (node.left === null && node.right === null) ? "#e8f0ff" : "#fff";
+      ctx.fill(); ctx.lineWidth = 1.4; ctx.strokeStyle = "#2f6df6"; ctx.stroke();
+      ctx.fillStyle = "#1f2329"; ctx.font = "11px " + "ui-monospace,Menlo,Consolas,monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      var label = (node.left === null && node.right === null) ? charLabel(node.sym) : String(node.freq);
+      ctx.fillText(label, x, y);
+    }
+    function drawEdge(p, c, bit){
+      ctx.beginPath(); ctx.moveTo(px(p), py(p)+13); ctx.lineTo(px(c), py(c)-13);
+      ctx.strokeStyle = "#c4ccd6"; ctx.lineWidth = 1.2; ctx.stroke();
+      var mx = (px(p)+px(c))/2, my = (py(p)+py(c))/2;
+      ctx.fillStyle = bit === "0" ? "#1a9e57" : "#d94b4b"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(bit, mx, my);
+    }
+    drawNode(root);
+  }
+
+  function verify(){
+    if (!lastComp){ errEl.textContent = "请先「生成压缩」"; return; }
+    var out;
+    try { out = HUFF.decompress(lastComp); }
+    catch(e){ errEl.textContent = "解码失败：" + e.message; return; }
+    if (out === srcEl.value){
+      okEl.textContent = "✓ 无损往返通过：解码结果与原文逐字节一致（" + lastComp.u8.length + " 字节）。";
+      errEl.textContent = "";
+    } else {
+      errEl.textContent = "✗ 往返不一致！解码长度 " + HUFF.textToBytes(out).length + " ≠ 原文 " + lastComp.u8.length;
+      okEl.textContent = "";
+    }
+  }
+
+  function randSample(){
+    var list = [
+      "she sells sea shells by the sea shore",
+      "数据包压缩的本质是消除冗余：出现越频繁的符号，分配的码字越短。",
+      "mississippi",
+      "aabbccddeeffgghhiijjkkllmmnnoopp",
+      "WebSocket 协议基于帧：FIN/RSV/opcode/length/mask/payload。",
+      "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "the cat sat on the mat and the dog ran to the log"
+    ];
+    srcEl.value = list[Math.floor(Math.random()*list.length)];
+    render();
+  }
+
+  $("gen").addEventListener("click", render);
+  $("verify").addEventListener("click", verify);
+  $("rand").addEventListener("click", randSample);
+  $("dl").addEventListener("click", function(){
+    if (!treeEl.width) return;
+    var a = document.createElement("a");
+    a.download = "bitweave-tree.png";
+    a.href = treeEl.toDataURL("image/png");
+    a.click();
+  });
+  sampleEl.addEventListener("change", function(){
+    if (sampleEl.value){ srcEl.value = sampleEl.value; render(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Test / probe scratch (not part of the deliverable)
+_smoke.log
+_probe.txt
+_probe.run.log
+_smoke.run.log
+_body.json
+_repo.json
+_*.log
