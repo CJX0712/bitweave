@@ -1,5 +1,12 @@
 # Bit Weave · 比特织机
 
+<p align="center">
+  <a href="https://github.com/CJX0712/bitweave/actions/workflows/ci.yml"><img src="https://github.com/CJX0712/bitweave/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="https://github.com/CJX0712/bitweave/releases"><img src="https://img.shields.io/github/v/release/CJX0712/bitweave?sort=semver" alt="release"></a>
+  <a href="https://github.com/CJX0712/bitweave/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CJX0712/bitweave" alt="license"></a>
+  <img src="https://img.shields.io/badge/author-%E6%99%A8%E6%98%9F-1f6feb" alt="author">
+</p>
+
 Huffman 无损压缩工坊 —— 把任意文本压成最短比特流，并把背后的**最优前缀码二叉树**画给你看。
 单文件 HTML，零依赖、完全离线，打开 `index.html` 即用。
 
